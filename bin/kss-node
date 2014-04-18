@@ -81,7 +81,11 @@ argv = require('optimist')
 	.string('M')
 	.alias('M', 'disable-markdown')
 	.describe('M', 'Disable Markdown styling')
-	
+
+	.string('T')
+	.alias('T', 'markup-template-directory')
+	.describe('T', 'Parse the markup for sections from a directory of *.hbs files, e.g. "styleguide-templates"')
+
 	.argv;
 
 argv.loadPath = argv['load-path']
@@ -189,6 +193,8 @@ process.nextTick(function() {
 
 			styleguide = sg;
 
+			parseMarkupTemplates(argv);
+
 			var sections = styleguide.section('*.'),
 				i, sectionCount = sections.length,
 				sectionRoots = [], currentRoot,
@@ -229,6 +235,25 @@ process.nextTick(function() {
 		});
 	});
 });
+
+// Parse the templates that define markup blocks
+parseMarkupTemplates = function(argv) {
+	var fileContents, markupTemplateDirectory = argv['markup-template-directory'];
+	if (!markupTemplateDirectory) return;
+
+	markupTemplateDirectory = path.relative(process.cwd(), markupTemplateDirectory)
+	console.log("...loading markup templates from", markupTemplateDirectory);
+
+	if (!fs.existsSync(markupTemplateDirectory)) return;
+
+	files = fs.readdirSync(markupTemplateDirectory)
+	files.forEach(function(file){
+		if (path.extname(file) == '.hbs') {
+			var fileContents = fs.readFileSync(path.join(markupTemplateDirectory, file), 'utf8');
+			handlebars.compile(fileContents)();
+		}
+	});
+};
 
 // Compile LESS/Stylus/CSS files into a single "style.css" if required
 compileImportedFiles = function(fileTypes, outputFilename, argv) {
@@ -474,6 +499,16 @@ handlebars.registerHelper('modifierMarkup', function(modifier) {
  */
 handlebars.registerHelper('html', function(arg) {
 	return new handlebars.SafeString(arg || '');
+});
+
+/**
+ * Define a block of markup for your docs
+ * @param  {String} sectionName The name of the section to define a block for
+ */
+handlebars.registerHelper('kssBlock', function(sectionName, content, elseContent) {
+	var section = styleguide.section(sectionName);
+	if (section)
+		section.data.markup = content();
 });
 
 process.on('exit', function() {
